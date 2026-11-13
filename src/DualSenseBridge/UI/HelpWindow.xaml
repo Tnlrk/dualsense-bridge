@@ -1,0 +1,26 @@
+<Window x:Class="DualSenseBridge.UI.HelpWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:DualSenseBridge.Localization"
+        Title="{Binding [help_title], Source={x:Static loc:Loc.Instance}}"
+        Width="820" Height="860" MinWidth="560" MinHeight="420"
+        WindowStartupLocation="CenterScreen"
+        Background="{DynamicResource WindowBg}"
+        FontFamily="Segoe UI Variable Text, Segoe UI"
+        UseLayoutRounding="True">
+    <Window.Resources>
+        <ResourceDictionary Source="Theme.xaml"/>
+    </Window.Resources>
+
+    <ScrollViewer x:Name="Scroller" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Margin="16,14,16,20">
+            <StackPanel Margin="8,4,8,6">
+                <TextBlock Text="{Binding [help_title], Source={x:Static loc:Loc.Instance}}" Style="{StaticResource H1}"/>
+                <TextBlock Text="{Binding [help_subtitle], Source={x:Static loc:Loc.Instance}}" Style="{StaticResource Dim}" FontSize="13"/>
+            </StackPanel>
+            <!-- Obsah: odkazy na sekce -->
+            <WrapPanel x:Name="Toc" Margin="4,6,4,4"/>
+            <StackPanel x:Name="Sections"/>
+        </StackPanel>
+    </ScrollViewer>
+</Window>
