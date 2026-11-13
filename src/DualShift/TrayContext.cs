@@ -41,9 +41,16 @@ public sealed class TrayContext : ApplicationContext
     private HelpWindow? _helpWindow;
     private bool _whitelistRepairTried;
     private bool _busy;
+    private readonly EventWaitHandle _showEvent;
+    private readonly bool _startMinimized;
+    private RegisteredWaitHandle? _showWait;
 
-    public TrayContext()
+    /// <param name="showEvent">Signál od dalšího spuštění aplikace – ukázat okno.</param>
+    /// <param name="startMinimized">Spuštěno s Windows – zůstat jen v liště.</param>
+    public TrayContext(EventWaitHandle showEvent, bool startMinimized)
     {
+        _showEvent = showEvent;
+        _startMinimized = startMinimized;
         Loc.SetLanguage(_settings.Language);
         Loc.LanguageChanged += () => { UpdateMenu(); UpdateTray(); };
         BuildMenu();
@@ -68,6 +75,14 @@ public sealed class TrayContext : ApplicationContext
 
     private async Task StartAsync()
     {
+        // Další spuštění exe (např. dvojklik, když už běží) jen přenese okno do popředí.
+        var ui = SynchronizationContext.Current!;
+        _showWait = ThreadPool.RegisterWaitForSingleObject(_showEvent,
+            (_, _) => ui.Post(_ => ShowSettings(), null), null, Timeout.Infinite, executeOnlyOnce: false);
+
+        // Při ručním spuštění se rovnou otevře okno; se startem Windows jen ikona v liště.
+        if (!_startMinimized) ShowSettings();
+
         RefreshInstalledCopy();
         if (!await EnsureViGEmAsync()) return;
         StartDevices();
@@ -158,9 +173,8 @@ public sealed class TrayContext : ApplicationContext
         try
         {
             Autostart.MigrateFromLegacyName();
-            if (Autostart.IsEnabled && Environment.ProcessPath is { } p &&
-                !string.Equals(Path.GetFullPath(p), Path.GetFullPath(Autostart.InstalledExePath), StringComparison.OrdinalIgnoreCase))
-                Autostart.Enable();
+            // Obnoví kopii v AppData (pokud běží jiná verze exe) i záznam v registru (spouštění do lišty).
+            if (Autostart.IsEnabled) Autostart.Enable();
         }
         catch { /* kopie se nepovedla – nevadí */ }
     }
@@ -266,6 +280,7 @@ public sealed class TrayContext : ApplicationContext
             _settingsForm.StateProvider = id => _devices?.GetState(id);
             _settingsForm.SettingsChanged += (_, _) => OnSettingsChanged();
             _settingsForm.HelpRequested += (_, _) => ShowHelp();
+            _settingsForm.HiddenToTray += (_, _) => ShowTrayHintOnce();
             _settingsForm.LanguageRequested += (_, lang) => SetLanguage(lang);
             _settingsForm.TestRumbleRequested += (_, _) =>
             {
@@ -276,6 +291,15 @@ public sealed class TrayContext : ApplicationContext
         }
         _settingsForm.UpdateControllers(_devices?.Controllers ?? Array.Empty<ControllerStatus>());
         _settingsForm.ShowAndActivate();
+    }
+
+    /// <summary>Po prvním zavření okna vysvětlit, že aplikace běží dál v liště.</summary>
+    private void ShowTrayHintOnce()
+    {
+        if (_settings.TrayHintShown) return;
+        _settings.TrayHintShown = true;
+        _settings.Save();
+        Notify(Loc.T("note_trayHintTitle"), Loc.T("note_trayHintText"), ToolTipIcon.Info, force: true);
     }
 
     private void ShowHelp()
@@ -501,6 +525,7 @@ public sealed class TrayContext : ApplicationContext
 
     protected override void ExitThreadCore()
     {
+        _showWait?.Unregister(null);
         _saveTimer.Stop();
         _settings.Save();
         _devices?.Dispose();

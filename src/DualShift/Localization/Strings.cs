@@ -49,6 +49,8 @@ public static class Strings
         ["note_chargedText"] = "{0} je plně nabitý.",
         ["note_vibrationOffTitle"] = "Vibrace",
         ["note_vibrationOffText"] = "Vibrace jsou vypnuté – zapni přepínač „Vibrace ze hry“.",
+        ["note_trayHintTitle"] = "DualShift běží dál",
+        ["note_trayHintText"] = "Najdeš ho v oznamovací oblasti vedle hodin (případně pod šipkou ^). Dvojklikem na ikonu otevřeš nastavení.",
 
         // --- Ovladače a instalace ---
         ["dep_vigem"] = "ViGEmBus (virtuální Xbox ovladač)",
@@ -178,6 +180,8 @@ public static class Strings
         ["note_chargedText"] = "{0} is fully charged.",
         ["note_vibrationOffTitle"] = "Vibration",
         ["note_vibrationOffText"] = "Vibration is turned off – turn on “Vibration from games”.",
+        ["note_trayHintTitle"] = "DualShift keeps running",
+        ["note_trayHintText"] = "You'll find it in the notification area next to the clock (or under the ^ arrow). Double-click the icon to open settings.",
 
         // --- Drivers and installation ---
         ["dep_vigem"] = "ViGEmBus (virtual Xbox controller)",

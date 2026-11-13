@@ -35,7 +35,8 @@ public static class Autostart
         }
 
         using var key = Registry.CurrentUser.CreateSubKey(RunKey);
-        key.SetValue(ValueName, $"\"{target}\"");
+        // Po přihlášení se spustí jen do lišty, bez okna.
+        key.SetValue(ValueName, $"\"{target}\" {Program.MinimizedArg}");
     }
 
     /// <summary>

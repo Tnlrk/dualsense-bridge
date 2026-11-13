@@ -37,6 +37,9 @@ public sealed class AppSettings
     public List<string> HiddenInstanceIds { get; set; } = new();
     public bool HidHideOffered { get; set; }
 
+    // Upozornění „aplikace běží dál v liště“ už bylo zobrazeno.
+    public bool TrayHintShown { get; set; }
+
     public AppSettings Clone()
     {
         var c = (AppSettings)MemberwiseClone();

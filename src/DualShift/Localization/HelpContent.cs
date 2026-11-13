@@ -33,6 +33,8 @@ public static class HelpContent
                      "Hry, které podporují Xbox ovladač, ho tak používají bez dalšího nastavení."),
             new Bullets(
                 "Aplikace běží v oznamovací oblasti vedle hodin. Dvojklik na ikonu otevře nastavení, pravé tlačítko menu.",
+                "Při spuštění se otevře okno nastavení; zavřením se aplikace schová do lišty a běží dál. Při spuštění s Windows zůstane rovnou jen v liště.",
+                "Ikonu můžeš mít vždy na očích: přetáhni ji ze šipky ^ vedle hodin přímo na lištu.",
                 "Všechna nastavení se projeví okamžitě a ukládají se automaticky.",
                 "Funguje přes USB kabel i Bluetooth a s více ovladači najednou (každý dostane vlastní Xbox ovladač).")),
 
@@ -113,6 +115,8 @@ public static class HelpContent
                      "so games that support Xbox controllers use it without any extra setup."),
             new Bullets(
                 "The app runs in the notification area next to the clock. Double-click the icon to open settings, right-click for the menu.",
+                "When you start it, the settings window opens; closing it hides the app to the tray where it keeps running. When started with Windows it goes straight to the tray.",
+                "To keep the icon always visible, drag it from the ^ arrow next to the clock onto the taskbar.",
                 "All settings apply instantly and are saved automatically.",
                 "Works over USB and Bluetooth, and with several controllers at once (each gets its own Xbox controller).")),
 

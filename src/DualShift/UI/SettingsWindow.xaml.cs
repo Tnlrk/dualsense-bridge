@@ -40,6 +40,8 @@ public partial class SettingsWindow : Window
     public event EventHandler? HelpRequested;
     /// <summary>Uživatel přepnul jazyk ("cs" / "en").</summary>
     public event EventHandler<string>? LanguageRequested;
+    /// <summary>Okno se zavřelo křížkem a aplikace běží dál v liště.</summary>
+    public event EventHandler? HiddenToTray;
     /// <summary>Živý stav ovladače podle Id – nastavuje TrayContext.</summary>
     public Func<string, DualSenseState?>? StateProvider { get; set; }
 
@@ -348,6 +350,7 @@ public partial class SettingsWindow : Window
         {
             e.Cancel = true;
             Hide();
+            HiddenToTray?.Invoke(this, EventArgs.Empty);
             return;
         }
         base.OnClosing(e);
