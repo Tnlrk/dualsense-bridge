@@ -1,11 +1,11 @@
-# DualSense Bridge
+# DualShift – PS5 to Xbox for PC
 
 **English** · [Česky](README.cs.md)
 
 A Windows tray app that turns a PS5 **DualSense** (and DualSense Edge) controller into a **virtual Xbox 360 controller** –
 so it works even in games that don't support PS5 controllers.
 
-**[⬇ Download the latest release](https://github.com/Tnlrk/dualsense-bridge/releases/latest)** – a single `DualSenseBridge.exe`, just run it.
+**[⬇ Download the latest release](https://github.com/Tnlrk/dualshift/releases/latest)** – a single `DualShift.exe`, just run it.
 
 ![Settings window](docs/screenshot-en.png)
 
@@ -38,10 +38,10 @@ so it works even in games that don't support PS5 controllers.
 | Touchpad click | Back (can be turned off) |
 
 ## Installation (also on another PC)
-1. Download `DualSenseBridge.exe` from [Releases](https://github.com/Tnlrk/dualsense-bridge/releases/latest) (or copy it from a USB stick) and run it.
+1. Download `DualShift.exe` from [Releases](https://github.com/Tnlrk/dualshift/releases/latest) (or copy it from a USB stick) and run it.
 2. If the **ViGEmBus** driver is missing, the app offers to install it (it is bundled; confirm the UAC prompt).
 3. On first start it also offers **HidHide** (hiding the original controller). A restart may be required after installing.
-4. Turn on **Start with Windows** in the tray menu. The exe is copied to `%LocalAppData%\DualSenseBridge`,
+4. Turn on **Start with Windows** in the tray menu. The exe is copied to `%LocalAppData%\DualShift`,
    so you can delete the original file.
 
 No need to install .NET – it is included in the exe. Requires Windows 10/11 (x64).
@@ -58,7 +58,7 @@ No need to install .NET – it is included in the exe. Requires Windows 10/11 (x
 ## Development
 ```
 dotnet test          # protocol tests (parser, output reports, CRC32, mapping, localization)
-./build.ps1          # tests + portable dist\DualSenseBridge.exe
+./build.ps1          # tests + portable dist\DualShift.exe
 ```
 Requires the .NET 8 SDK. Structure: `DualSense/` (HID protocol), `Bridge/` (ViGEm + device management), `HidHide/`,
 `Setup/` (bundled driver installers in `Redist/`), `Localization/` (CZ/EN texts and help), `UI/` (tray icon, WPF settings and help windows).
@@ -68,5 +68,5 @@ Render previews without running the app: `$env:PREVIEW_DIR="C:\some\folder"; dot
 ## Credits
 - [ViGEmBus](https://github.com/nefarius/ViGEmBus) and [HidHide](https://github.com/nefarius/HidHide) drivers by Nefarius Software Solutions (BSD-3-Clause), bundled installers.
 - [HidSharp](https://www.zer7.com/software/hidsharp) for HID access.
-- The DualSense product photo (`src/DualSenseBridge/Assets/dualsense.png`) is a third-party image used for illustration.
+- The DualSense product photo (`src/DualShift/Assets/dualsense.png`) is a third-party image used for illustration.
   PlayStation, DualSense and Xbox are trademarks of their respective owners; this project is not affiliated with Sony or Microsoft.

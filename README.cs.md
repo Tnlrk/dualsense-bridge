@@ -1,11 +1,11 @@
-# DualSense Bridge
+# DualShift – PS5 to Xbox for PC
 
 [English](README.md) · **Česky**
 
 Aplikace v oznamovací oblasti (vedle hodin), která z PS5 ovladače **DualSense** (a DualSense Edge) udělá
 **virtuální Xbox 360 ovladač**. Funguje tak i ve hrách, které PS5 ovladač nepodporují.
 
-**[⬇ Stáhnout nejnovější verzi](https://github.com/Tnlrk/dualsense-bridge/releases/latest)** – jeden soubor `DualSenseBridge.exe`, stačí spustit.
+**[⬇ Stáhnout nejnovější verzi](https://github.com/Tnlrk/dualshift/releases/latest)** – jeden soubor `DualShift.exe`, stačí spustit.
 
 ![Okno nastavení](docs/screenshot-cs.png)
 
@@ -37,10 +37,10 @@ Aplikace v oznamovací oblasti (vedle hodin), která z PS5 ovladače **DualSense
 | Klik na touchpad | Back (dá se vypnout) |
 
 ## Instalace (i na jiný PC)
-1. Stáhni `DualSenseBridge.exe` z [Releases](https://github.com/Tnlrk/dualsense-bridge/releases/latest) (nebo ho zkopíruj třeba z flashky) a spusť ho.
+1. Stáhni `DualShift.exe` z [Releases](https://github.com/Tnlrk/dualshift/releases/latest) (nebo ho zkopíruj třeba z flashky) a spusť ho.
 2. Pokud na PC chybí ovladač **ViGEmBus**, aplikace ho nabídne nainstalovat (je přibalený, potvrdíš UAC).
 3. Při prvním spuštění nabídne i **HidHide** (skrývání originálu). Po instalaci může být potřeba restart.
-4. V menu v liště zapni **Spouštět s Windows**. Exe se zkopíruje do `%LocalAppData%\DualSenseBridge`,
+4. V menu v liště zapni **Spouštět s Windows**. Exe se zkopíruje do `%LocalAppData%\DualShift`,
    takže původní soubor můžeš smazat.
 
 .NET instalovat není potřeba, je součástí exe. Vyžaduje Windows 10/11 (x64).
@@ -57,7 +57,7 @@ Aplikace v oznamovací oblasti (vedle hodin), která z PS5 ovladače **DualSense
 ## Vývoj
 ```
 dotnet test          # testy protokolu (parser, výstupní reporty, CRC32, mapování, lokalizace)
-./build.ps1          # testy + přenosný dist\DualSenseBridge.exe
+./build.ps1          # testy + přenosný dist\DualShift.exe
 ```
 Potřebuješ .NET 8 SDK. Struktura: `DualSense/` (HID protokol), `Bridge/` (ViGEm + správa zařízení), `HidHide/`,
 `Setup/` (přibalené instalátory ovladačů v `Redist/`), `Localization/` (texty CZ/EN a nápověda), `UI/` (ikona v liště, okna nastavení a nápovědy ve WPF).
@@ -67,5 +67,5 @@ Náhledy vykreslení (bez spuštění aplikace): `$env:PREVIEW_DIR="C:\nejaka\sl
 ## Poděkování
 - Ovladače [ViGEmBus](https://github.com/nefarius/ViGEmBus) a [HidHide](https://github.com/nefarius/HidHide) od Nefarius Software Solutions (BSD-3-Clause), přibalené instalátory.
 - [HidSharp](https://www.zer7.com/software/hidsharp) pro přístup k HID.
-- Produktová fotka DualSense (`src/DualSenseBridge/Assets/dualsense.png`) je obrázek třetí strany použitý pro ilustraci.
+- Produktová fotka DualSense (`src/DualShift/Assets/dualsense.png`) je obrázek třetí strany použitý pro ilustraci.
   PlayStation, DualSense a Xbox jsou ochranné známky svých vlastníků; projekt není spojený se Sony ani Microsoftem.
