@@ -9,6 +9,7 @@ public static class InputReportParser
     public const byte UsbReportId = 0x01;
     public const byte BtFullReportId = 0x31;
     public const byte BtSimpleReportId = 0x01;
+    public const int BtFullLength = 78;
 
     // Offsety uvnitř společné struktury input reportu (bez report ID).
     private const int OffLX = 0, OffLY = 1, OffRX = 2, OffRY = 3, OffL2 = 4, OffR2 = 5;
@@ -34,6 +35,11 @@ public static class InputReportParser
         }
         else if (connection == ConnectionType.Bluetooth && report[0] == BtFullReportId)
         {
+            // Bluetooth report končí kontrolním součtem – poškozený (rušení) zahodit,
+            // aby nevznikl falešný stisk tlačítka.
+            if (report.Length < BtFullLength) return false;
+            uint expected = (uint)(report[74] | report[75] << 8 | report[76] << 16 | report[77] << 24);
+            if (Crc32.Compute(0xA1, report[..74]) != expected) return false;
             b = 2;
         }
         else if (connection == ConnectionType.Bluetooth && report[0] == BtSimpleReportId)

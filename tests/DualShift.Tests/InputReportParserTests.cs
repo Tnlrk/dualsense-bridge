@@ -21,6 +21,7 @@ public class InputReportParserTests
         r[2] = r[3] = r[4] = r[5] = 0x80;
         r[9] = 0x08;
         fill(r, 2);
+        BitConverter.TryWriteBytes(r.AsSpan(74), Crc32.Compute(0xA1, r.AsSpan(0, 74)));
         return r;
     }
 
@@ -78,6 +79,14 @@ public class InputReportParserTests
         Assert.Equal(DsButtons.Triangle | DsButtons.DpadUp | DsButtons.Touchpad, s.Buttons);
         Assert.Equal(100, s.BatteryPercent);
         Assert.Equal(ChargingState.Full, s.Charging);
+    }
+
+    [Fact]
+    public void BluetoothFull_CorruptedReportIsRejected()
+    {
+        var r = BtFullReport((_, _) => { });
+        r[10] ^= 0x01; // přehozený bit tlačítka po cestě
+        Assert.False(InputReportParser.TryParse(r, ConnectionType.Bluetooth, out _, out _));
     }
 
     [Fact]
