@@ -14,7 +14,7 @@ public sealed class ControllerBridge : IDisposable
 {
     private readonly IXbox360Controller _pad;
     private readonly object _lock = new();
-    private AppSettings _settings;
+    private volatile AppSettings _settings;
     private XInputState? _lastSent;
     private byte _largeMotor, _smallMotor;
     private volatile bool _l2Pressed, _r2Pressed;
@@ -60,16 +60,18 @@ public sealed class ControllerBridge : IDisposable
         Task.Delay(650).ContinueWith(_ => UpdateOutput());
     }
 
-    private sealed record StateBox(DualSenseState Value);
-    private volatile StateBox? _lastState;
+    private readonly object _stateLock = new();
+    private DualSenseState? _lastState;
 
     /// <summary>Poslední přijatý stav (pro test tlačítek v nastavení).</summary>
-    public DualSenseState? LastState => _lastState?.Value;
+    public DualSenseState? LastState
+    {
+        get { lock (_stateLock) return _lastState; }
+    }
 
     private void OnState(DualSenseDevice _, DualSenseState state)
     {
-        var box = _lastState;
-        if (box is null || box.Value != state) _lastState = new StateBox(state);
+        lock (_stateLock) _lastState = state;
 
         var x = XInputMapper.Map(state, _settings.TouchpadAsBack);
         if (x != _lastSent)
@@ -164,6 +166,7 @@ public sealed class ControllerBridge : IDisposable
         Device.StateReceived -= OnState;
         _pad.FeedbackReceived -= OnFeedback;
         try { _pad.Disconnect(); } catch { /* už odpojený */ }
+        (_pad as IDisposable)?.Dispose();
         Device.Dispose();
     }
 }

@@ -28,11 +28,15 @@ public sealed class DualSenseDevice : IDisposable
     private bool _lightbarReleased;
     private byte _btSequence;
     private int _disconnectedRaised;
+    private volatile bool _disposed;
 
     public string DevicePath => _device.DevicePath;
     public ConnectionType Connection { get; }
     public bool IsEdge => _device.ProductID == DualSenseEdgeProductId;
     public string DisplayName => IsEdge ? "DualSense Edge" : "DualSense";
+
+    /// <summary>true, jakmile se zařízení odpojilo nebo bylo uvolněno.</summary>
+    public bool IsClosed => Volatile.Read(ref _disconnectedRaised) != 0;
 
     /// <summary>Volá se z čtecího vlákna pro každý report.</summary>
     public event Action<DualSenseDevice, DualSenseState>? StateReceived;
@@ -52,35 +56,34 @@ public sealed class DualSenseDevice : IDisposable
     public static IEnumerable<HidDevice> Enumerate() =>
         DeviceList.Local.GetHidDevices(SonyVendorId).Where(IsDualSense);
 
-    /// <summary>Otevře zařízení; vrací null, pokud nejde otevřít (např. ho skrývá HidHide).</summary>
+    /// <summary>
+    /// Otevře zařízení; vrací null, pokud nejde otevřít (např. ho skrývá HidHide).
+    /// Čtení a zápis začnou až po <see cref="Start"/> – nejdřív se přihlas k událostem.
+    /// </summary>
     public static DualSenseDevice? TryOpen(HidDevice device)
     {
-        int maxInput;
-        try { maxInput = device.GetMaxInputReportLength(); }
-        catch { return null; }
-
-        // USB input report má 64 B, Bluetooth 78 B.
-        var connection = maxInput > 64 ? ConnectionType.Bluetooth : ConnectionType.Usb;
-        if (!device.TryOpen(out HidStream stream)) return null;
-
-        var ds = new DualSenseDevice(device, stream, connection);
-        ds.Initialize();
-        return ds;
+        try
+        {
+            // USB input report má 64 B, Bluetooth 78 B.
+            var connection = device.GetMaxInputReportLength() > 64 ? ConnectionType.Bluetooth : ConnectionType.Usb;
+            if (!device.TryOpen(out HidStream stream)) return null;
+            stream.ReadTimeout = 1000;
+            stream.WriteTimeout = 1000;
+            return new DualSenseDevice(device, stream, connection);
+        }
+        catch
+        {
+            return null;
+        }
     }
 
-    private void Initialize()
+    /// <summary>Spustí čtecí vlákno (to po úvodní komunikaci s ovladačem spustí i zapisovací).</summary>
+    public void Start()
     {
-        _stream.ReadTimeout = 1000;
-        _stream.WriteTimeout = 1000;
-
-        _vibrationV2 = ReadVibrationV2();
-        if (Connection == ConnectionType.Bluetooth)
-            RequestFullReports();
-
-        _reader = new Thread(ReadLoop) { IsBackground = true, Name = "DualSense reader" };
+        if (_reader is not null || _disposed) return;
         _writer = new Thread(WriteLoop) { IsBackground = true, Name = "DualSense writer" };
+        _reader = new Thread(ReadLoop) { IsBackground = true, Name = "DualSense reader" };
         _reader.Start();
-        _writer.Start();
     }
 
     /// <summary>Přečtení kalibrace (feature 0x05) přepne BT ovladač do plného reportu 0x31.</summary>
@@ -121,10 +124,17 @@ public sealed class DualSenseDevice : IDisposable
 
     private void ReadLoop()
     {
-        var buf = new byte[Math.Max(_device.GetMaxInputReportLength(), 78)];
-        var lastFullRequest = Stopwatch.StartNew();
         try
         {
+            // Úvodní komunikace (může u Bluetooth chvíli trvat) běží tady, ne na UI vlákně.
+            _vibrationV2 = ReadVibrationV2();
+            if (Connection == ConnectionType.Bluetooth)
+                RequestFullReports();
+            if (_disposed) return;
+            _writer!.Start();
+
+            var buf = new byte[Math.Max(_device.GetMaxInputReportLength(), 78)];
+            var lastFullRequest = Stopwatch.StartNew();
             while (!_cts.IsCancellationRequested)
             {
                 int n;
@@ -145,8 +155,10 @@ public sealed class DualSenseDevice : IDisposable
                 StateReceived?.Invoke(this, state);
             }
         }
-        catch (Exception ex) when (ex is IOException or ObjectDisposedException or InvalidOperationException)
+        catch (Exception ex)
         {
+            // Odpojení (IOException), uvolnění (ObjectDisposedException) i cokoli nečekaného
+            // ukončí jen tento ovladač, ne celou aplikaci.
             Debug.WriteLine($"DualSense read ended: {ex.Message}");
         }
         RaiseDisconnected();
@@ -156,23 +168,32 @@ public sealed class DualSenseDevice : IDisposable
     public void SetOutput(OutputState output)
     {
         lock (_outputLock) _pendingOutput = output;
-        _outputSignal.Set();
+        if (_disposed) return;
+        try { _outputSignal.Set(); }
+        catch (ObjectDisposedException) { /* právě se uvolňuje */ }
     }
 
     private void WriteLoop()
     {
-        while (!_cts.IsCancellationRequested)
+        try
         {
-            _outputSignal.WaitOne(500);
-            if (_cts.IsCancellationRequested) break;
+            while (!_cts.IsCancellationRequested)
+            {
+                _outputSignal.WaitOne(500);
+                if (_cts.IsCancellationRequested) break;
 
-            OutputState? output;
-            lock (_outputLock) output = _pendingOutput;
-            if (output is null || output.Equals(_lastWrittenOutput)) continue;
+                OutputState? output;
+                lock (_outputLock) output = _pendingOutput;
+                if (output is null || output.Equals(_lastWrittenOutput)) continue;
 
-            if (!Write(output)) continue;
-            _lastWrittenOutput = output;
-            Thread.Sleep(8); // nezahltit BT
+                if (!Write(output)) continue;
+                _lastWrittenOutput = output;
+                Thread.Sleep(8); // nezahltit BT
+            }
+        }
+        catch (ObjectDisposedException)
+        {
+            // Zařízení se uvolnilo během čekání.
         }
     }
 
@@ -201,15 +222,15 @@ public sealed class DualSenseDevice : IDisposable
 
     public void Dispose()
     {
-        if (_cts.IsCancellationRequested) return;
+        if (_disposed) return;
+        _disposed = true;
         _cts.Cancel();
         _outputSignal.Set();
-        _writer?.Join(1000);
+        if (_writer is { IsAlive: true }) _writer.Join(1000);
 
         // Vrátit ovladač do klidu: bez vibrací a efektů triggerů.
-        if (_disconnectedRaised == 0)
+        if (Volatile.Read(ref _disconnectedRaised) == 0 && _lastWrittenOutput is { } last)
         {
-            var last = _lastWrittenOutput ?? new OutputState();
             Write(last with
             {
                 MotorLeft = 0, MotorRight = 0,
@@ -217,7 +238,7 @@ public sealed class DualSenseDevice : IDisposable
             });
         }
 
-        _disconnectedRaised = 1; // vlastní ukončení – nehlásit odpojení
+        Volatile.Write(ref _disconnectedRaised, 1); // vlastní ukončení – nehlásit odpojení
         _stream.Dispose();
         _reader?.Join(1500);
         _outputSignal.Dispose();

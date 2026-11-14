@@ -23,7 +23,8 @@ public partial class SettingsWindow : Window
     private IReadOnlyList<ControllerStatus> _controllers = Array.Empty<ControllerStatus>();
     private string? _selectedId;
     private WriteableBitmap? _frame;
-    private string? _lastFrameKey;
+    // Co je právě vykreslené – nový snímek se kreslí jen při změně.
+    private (string Lang, DualSenseState? State, int Player, int Lightbar, bool Touchpad, int W, int H)? _lastFrameKey;
     private bool _loading;
     private bool _allowClose;
 
@@ -292,6 +293,7 @@ public partial class SettingsWindow : Window
 
     private void UpdateLiveView()
     {
+        if (WindowState == WindowState.Minimized) return;
         var c = _controllers.FirstOrDefault(x => x.Id == _selectedId);
         _painter.State = c is null ? null : StateProvider?.Invoke(c.Id);
         _painter.PlayerIndex = c is not null && _settings.PlayerLeds ? c.PlayerIndex : -1;
@@ -300,11 +302,11 @@ public partial class SettingsWindow : Window
         int w = (int)(ImageHost.ActualWidth * dpi.DpiScaleX), h = (int)(ImageHost.ActualHeight * dpi.DpiScaleY);
         if (w < 10 || h < 10) return;
 
-        string key = $"{Loc.Language}|{_painter.State}|{_painter.PlayerIndex}|{_painter.Lightbar.ToArgb()}|{_painter.TouchpadAsBack}|{w}x{h}";
+        var key = (Loc.Language, _painter.State, _painter.PlayerIndex, _painter.Lightbar.ToArgb(), _painter.TouchpadAsBack, w, h);
         if (key == _lastFrameKey) return;
         _lastFrameKey = key;
 
-        using var bmp = _painter.Render(w, h);
+        var bmp = _painter.Render(w, h);
         if (_frame is null || _frame.PixelWidth != w || _frame.PixelHeight != h)
         {
             _frame = new WriteableBitmap(w, h, 96 * dpi.DpiScaleX, 96 * dpi.DpiScaleY, PixelFormats.Pbgra32, null);

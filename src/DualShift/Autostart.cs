@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.Win32;
 
 namespace DualShift;
@@ -28,7 +29,8 @@ public static class Autostart
     {
         string current = Environment.ProcessPath ?? throw new InvalidOperationException("Neznámá cesta k exe.");
         string target = InstalledExePath;
-        if (!string.Equals(Path.GetFullPath(current), Path.GetFullPath(target), StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(Path.GetFullPath(current), Path.GetFullPath(target), StringComparison.OrdinalIgnoreCase)
+            && IsNewer(current, target))
         {
             Directory.CreateDirectory(Path.GetDirectoryName(target)!);
             File.Copy(current, target, overwrite: true);
@@ -50,6 +52,15 @@ public static class Autostart
         if (key?.GetValue(legacyValue) is not string) return;
         key.DeleteValue(legacyValue, throwOnMissingValue: false);
         Enable();
+    }
+
+    /// <summary>Kopírovat jen když kopie chybí nebo je starší – ne 70 MB při každém spuštění.</summary>
+    private static bool IsNewer(string current, string installed)
+    {
+        if (!File.Exists(installed)) return true;
+        static Version Ver(string path) =>
+            Version.TryParse(FileVersionInfo.GetVersionInfo(path).FileVersion, out var v) ? v : new Version(0, 0);
+        return Ver(current) > Ver(installed);
     }
 
     public static void Disable()

@@ -85,8 +85,7 @@ public class PreviewRender
     private static void RenderPainter(string path, DualSenseState? s)
     {
         var p = new ControllerPainter { State = s, PlayerIndex = 0 };
-        using var bmp = p.Render(760, 572);
-        bmp.Save(path);
+        p.Render(760, 572).Save(path);
     }
 
     private static void RenderWindow(string path)

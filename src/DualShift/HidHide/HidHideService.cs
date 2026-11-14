@@ -1,6 +1,7 @@
 using DualShift.Localization;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Text.RegularExpressions;
 using Nefarius.Drivers.HidHide;
 using Nefarius.Utilities.DeviceManagement.PnP;
 
@@ -38,19 +39,14 @@ public static class HidHideService
 
         try
         {
-            var psi = new ProcessStartInfo(Environment.ProcessPath!)
-            {
-                UseShellExecute = true,
-                Verb = "runas",
-                Arguments = string.Join(' ', args.Select(Quote)),
-            };
+            var psi = new ProcessStartInfo(Environment.ProcessPath!) { UseShellExecute = true, Verb = "runas" };
+            foreach (var a in args) psi.ArgumentList.Add(a);
             using var p = Process.Start(psi);
-            if (p is null)
+            if (p is null || !p.WaitForExit(30_000))
             {
                 error = Loc.T("hh_notStarted");
                 return false;
             }
-            p.WaitForExit(30_000);
             if (p.ExitCode != 0) error = Loc.F("hh_failed", p.ExitCode);
             return p.ExitCode == 0;
         }
@@ -66,7 +62,16 @@ public static class HidHideService
         }
     }
 
-    private static string Quote(string s) => "\"" + s.Replace("\"", "\\\"") + "\"";
+    /// <summary>
+    /// Elevovaný proces smí skrývat jen DualSense (Sony 054C, PID 0CE6 / 0DF2) –
+    /// ne libovolné zařízení, které by mu někdo podstrčil na příkazové řádce.
+    /// </summary>
+    internal static bool IsDualSenseInstanceId(string id) =>
+        id.StartsWith(@"HID\", StringComparison.OrdinalIgnoreCase) &&
+        DualSenseIdPattern.IsMatch(id);
+
+    private static readonly Regex DualSenseIdPattern = new(
+        @"VID[_&](0002)?054C.*PID[_&](0CE6|0DF2)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     /// <summary>Tělo elevovaného procesu: <c>--hidhide hide|unhide id1 id2 …</c>.</summary>
     public static int RunElevatedCommand(string[] args)
@@ -78,7 +83,7 @@ public static class HidHideService
             if (!svc.IsInstalled) return 3;
 
             bool hide = args[1] == "hide";
-            var ids = args.Skip(2).Where(s => !string.IsNullOrWhiteSpace(s)).ToList();
+            var ids = args.Skip(2).Where(IsDualSenseInstanceId).ToList();
             var blocked = new HashSet<string>(svc.BlockedInstanceIds, StringComparer.OrdinalIgnoreCase);
 
             if (hide)

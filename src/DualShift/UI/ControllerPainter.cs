@@ -52,29 +52,57 @@ public sealed class ControllerPainter
     /// <summary>Bod na fotce (souřadnice 1200×803) → plátno.</summary>
     private static PointF P(float x, float y) => new(x, TopBand + y);
 
-    /// <summary>Vykreslí do nové bitmapy dané velikosti (v pixelech).</summary>
+    // Fotka zmenšená na aktuální velikost se počítá jen jednou (kvalitní zmenšení je drahé);
+    // každý snímek se pak jen zkopíruje a dokreslí se překryvy.
+    private Bitmap? _backdrop, _frame;
+    private Color _backdropColor;
+
+    /// <summary>
+    /// Vykreslí snímek dané velikosti (v pixelech). Vrácená bitmapa patří painteru
+    /// a příštím voláním se přepíše – nevolat na ni Dispose.
+    /// </summary>
     public Bitmap Render(int width, int height)
     {
-        var bmp = new Bitmap(Math.Max(1, width), Math.Max(1, height), PixelFormat.Format32bppPArgb);
-        using var g = Graphics.FromImage(bmp);
-        Paint(g, bmp.Width, bmp.Height);
-        return bmp;
+        width = Math.Max(1, width);
+        height = Math.Max(1, height);
+        if (_frame is null || _frame.Width != width || _frame.Height != height || _backdropColor != Background)
+        {
+            _frame?.Dispose();
+            _backdrop?.Dispose();
+            _frame = new Bitmap(width, height, PixelFormat.Format32bppPArgb);
+            _backdrop = new Bitmap(width, height, PixelFormat.Format32bppPArgb);
+            _backdropColor = Background;
+            using var bg = Graphics.FromImage(_backdrop);
+            bg.Clear(Background);
+            if (Photo.Value is { } img)
+            {
+                bg.InterpolationMode = InterpolationMode.HighQualityBicubic;
+                bg.PixelOffsetMode = PixelOffsetMode.HighQuality;
+                ApplyTransform(bg, width, height);
+                bg.DrawImage(img, 0, TopBand, W, ImgH);
+            }
+        }
+
+        using var g = Graphics.FromImage(_frame);
+        g.CompositingMode = CompositingMode.SourceCopy;
+        g.DrawImageUnscaled(_backdrop!, 0, 0);
+        g.CompositingMode = CompositingMode.SourceOver;
+        PaintOverlays(g, width, height);
+        return _frame;
     }
 
-    public void Paint(Graphics g, float width, float height)
+    private static void ApplyTransform(Graphics g, float width, float height)
     {
-        g.Clear(Background);
-        g.SmoothingMode = SmoothingMode.AntiAlias;
-        g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
-        g.InterpolationMode = InterpolationMode.HighQualityBicubic;
-        g.PixelOffsetMode = PixelOffsetMode.HighQuality;
-
         float scale = Math.Min(width / W, height / H);
         g.TranslateTransform((width - W * scale) / 2, (height - H * scale) / 2);
         g.ScaleTransform(scale, scale);
+    }
 
-        if (Photo.Value is { } img)
-            g.DrawImage(img, 0, TopBand, W, ImgH);
+    private void PaintOverlays(Graphics g, float width, float height)
+    {
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+        g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
+        ApplyTransform(g, width, height);
 
         DrawShoulders(g);
         DrawLightbarAndLeds(g);

@@ -40,6 +40,17 @@ public sealed class AppSettings
     // Upozornění „aplikace běží dál v liště“ už bylo zobrazeno.
     public bool TrayHintShown { get; set; }
 
+    /// <summary>Ručně upravený nebo poškozený soubor nesmí aplikaci shodit – doplní chybějící a ořízne rozsahy.</summary>
+    private AppSettings Sanitized()
+    {
+        LeftTrigger ??= TriggerEffect.None;
+        RightTrigger ??= TriggerEffect.None;
+        HiddenInstanceIds ??= new();
+        LightbarColor &= 0xFFFFFF;
+        LightbarBrightness = Math.Clamp(LightbarBrightness, 1, 100);
+        return this;
+    }
+
     public AppSettings Clone()
     {
         var c = (AppSettings)MemberwiseClone();
@@ -75,7 +86,7 @@ public sealed class AppSettings
                 File.Copy(LegacyFilePath, FilePath);
             }
             if (File.Exists(FilePath))
-                return JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(FilePath), JsonOptions) ?? new();
+                return (JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(FilePath), JsonOptions) ?? new()).Sanitized();
         }
         catch
         {

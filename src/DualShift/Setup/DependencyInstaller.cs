@@ -2,6 +2,7 @@ using DualShift.Localization;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Reflection;
+using System.Security.Cryptography;
 using Nefarius.Drivers.HidHide;
 using Nefarius.ViGEm.Client;
 
@@ -56,40 +57,51 @@ public static class DependencyInstaller
     }
 
     /// <summary>
-    /// Rozbalí přibalený instalátor do %TEMP% a spustí ho s právy správce (UAC).
-    /// Vrací true, pokud instalátor doběhl s kódem 0 nebo 3010 (vyžaduje restart).
+    /// Rozbalí přibalený instalátor do nové dočasné složky a spustí ho s právy správce (UAC).
+    /// Instalátor běží se zvýšenými právy, proto se hlídá, aby ho mezi rozbalením a spuštěním
+    /// nešlo podvrhnout: složka je nová (nikdo do ní předem nepodstrčil DLL) a soubor se
+    /// před spuštěním ověří proti přibalenému originálu a do spuštění drží zamčený.
     /// </summary>
     public static async Task<InstallResult> InstallAsync(Dependency d)
     {
         string resource = d == Dependency.ViGEmBus ? "Redist.ViGEmBus_Setup.exe" : "Redist.HidHide_Setup.exe";
-        string dir = Path.Combine(Path.GetTempPath(), "DualShift");
-        Directory.CreateDirectory(dir);
-        string file = Path.Combine(dir, resource["Redist.".Length..]);
-
-        await using (var src = Assembly.GetExecutingAssembly().GetManifestResourceStream(resource))
-        {
-            if (src is null) return InstallResult.Failed(Loc.T("dep_notBundled"));
-            await using var dst = File.Create(file);
-            await src.CopyToAsync(dst);
-        }
-
+        string? dir = null;
         try
         {
-            using var p = Process.Start(new ProcessStartInfo(file)
-            {
-                UseShellExecute = true,
-                Verb = "runas",
-            });
-            if (p is null) return InstallResult.Failed(Loc.T("dep_notStarted"));
-            await p.WaitForExitAsync();
+            dir = Directory.CreateTempSubdirectory("DualShift-").FullName;
+            string file = Path.Combine(dir, resource["Redist.".Length..]);
 
-            return p.ExitCode switch
+            byte[] expected;
+            await using (var src = Assembly.GetExecutingAssembly().GetManifestResourceStream(resource))
             {
-                0 => IsInstalled(d) ? InstallResult.Ok : InstallResult.NeedsRestart,
-                3010 or 1641 => InstallResult.NeedsRestart,
-                1602 or 1223 => InstallResult.Failed(Loc.T("dep_cancelled")),
-                _ => IsInstalled(d) ? InstallResult.Ok : InstallResult.Failed(Loc.F("dep_exitCode", p.ExitCode)),
-            };
+                if (src is null) return InstallResult.Failed(Loc.T("dep_notBundled"));
+                await using (var dst = new FileStream(file, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                    await src.CopyToAsync(dst);
+                src.Position = 0;
+                expected = await SHA256.HashDataAsync(src);
+            }
+
+            Process? p;
+            // Dokud je soubor otevřený jen pro čtení, nejde přepsat ani smazat.
+            await using (var guard = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read))
+            {
+                if (!(await SHA256.HashDataAsync(guard)).AsSpan().SequenceEqual(expected))
+                    return InstallResult.Failed(Loc.T("dep_notStarted"));
+                p = Process.Start(new ProcessStartInfo(file) { UseShellExecute = true, Verb = "runas" });
+            }
+            if (p is null) return InstallResult.Failed(Loc.T("dep_notStarted"));
+
+            using (p)
+            {
+                await p.WaitForExitAsync();
+                return p.ExitCode switch
+                {
+                    0 => IsInstalled(d) ? InstallResult.Ok : InstallResult.NeedsRestart,
+                    3010 or 1641 => InstallResult.NeedsRestart,
+                    1602 or 1223 => InstallResult.Failed(Loc.T("dep_cancelled")),
+                    _ => IsInstalled(d) ? InstallResult.Ok : InstallResult.Failed(Loc.F("dep_exitCode", p.ExitCode)),
+                };
+            }
         }
         catch (Win32Exception ex) when (ex.NativeErrorCode == 1223)
         {
@@ -101,7 +113,8 @@ public static class DependencyInstaller
         }
         finally
         {
-            try { File.Delete(file); } catch { /* instalátor může ještě běžet */ }
+            try { if (dir is not null) Directory.Delete(dir, recursive: true); }
+            catch { /* instalátor může ještě běžet */ }
         }
     }
 }

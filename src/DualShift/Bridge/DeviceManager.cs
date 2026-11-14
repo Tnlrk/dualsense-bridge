@@ -11,6 +11,10 @@ namespace DualShift.Bridge;
 /// </summary>
 public sealed class DeviceManager : IDisposable
 {
+    // Běžně stačí událost o změně zařízení; časovač je jen pojistka a opakuje pokusy u ovladačů,
+    // které se nepodařilo otevřít (např. těsně po připojení přes Bluetooth).
+    private const int IdlePollMs = 10_000, RetryPollMs = 2_000;
+
     private readonly ViGEmClient _client;
     private readonly SynchronizationContext _ui;
     private readonly Dictionary<string, ControllerBridge> _bridges = new(StringComparer.OrdinalIgnoreCase);
@@ -23,7 +27,10 @@ public sealed class DeviceManager : IDisposable
     public event Action<ControllerStatus>? ControllerConnected;
     public event Action<ControllerStatus>? ControllerDisconnected;
     public event Action<ControllerStatus>? ControllerStatusChanged;
-    /// <summary>DualSense, který nejde otevřít (pravděpodobně ho skrývá HidHide a aplikace není na whitelistu).</summary>
+    /// <summary>
+    /// DualSense, který nejde otevřít (pravděpodobně ho skrývá HidHide a aplikace není na whitelistu).
+    /// Hlásí se jednou; další pokusy o otevření probíhají potichu.
+    /// </summary>
     public event Action<string>? ControllerInaccessible;
 
     /// <exception cref="Nefarius.ViGEm.Client.Exceptions.VigemBusNotFoundException">Chybí ovladač ViGEmBus.</exception>
@@ -34,7 +41,7 @@ public sealed class DeviceManager : IDisposable
         _client = new ViGEmClient();
 
         DeviceList.Local.Changed += OnDeviceListChanged;
-        _pollTimer = new System.Windows.Forms.Timer { Interval = 3000 };
+        _pollTimer = new System.Windows.Forms.Timer { Interval = IdlePollMs };
         _pollTimer.Tick += (_, _) => Scan();
         _pollTimer.Start();
     }
@@ -79,40 +86,40 @@ public sealed class DeviceManager : IDisposable
         catch { return; }
 
         var present = new HashSet<string>(devices.Select(d => d.DevicePath), StringComparer.OrdinalIgnoreCase);
-        _failedPaths.IntersectWith(present); // po odpojení zkusit znovu
+        _failedPaths.IntersectWith(present);
 
         foreach (var hid in devices)
         {
-            if (_bridges.ContainsKey(hid.DevicePath) || _failedPaths.Contains(hid.DevicePath)) continue;
+            string path = hid.DevicePath;
+            if (_bridges.ContainsKey(path)) continue;
 
             var ds = DualSenseDevice.TryOpen(hid);
-            if (ds is null)
+            ControllerBridge? bridge = null;
+            if (ds is not null)
             {
-                _failedPaths.Add(hid.DevicePath);
-                ControllerInaccessible?.Invoke(hid.DevicePath);
+                try { bridge = new ControllerBridge(ds, _client, _settings); }
+                catch { ds.Dispose(); }
+            }
+            if (ds is null || bridge is null)
+            {
+                // Ohlásit jen poprvé; časovač to pak zkouší znovu.
+                if (_failedPaths.Add(path) && ds is null) ControllerInaccessible?.Invoke(path);
                 continue;
             }
 
-            ControllerBridge bridge;
-            try
-            {
-                bridge = new ControllerBridge(ds, _client, _settings);
-            }
-            catch
-            {
-                ds.Dispose();
-                _failedPaths.Add(hid.DevicePath);
-                continue;
-            }
-
-            _bridges[hid.DevicePath] = bridge;
+            _failedPaths.Remove(path);
+            _bridges[path] = bridge;
             ds.Disconnected += d => _ui.Post(_ => Remove(d.DevicePath), null);
             bridge.StatusChanged += b => _ui.Post(_ =>
             {
                 if (_bridges.ContainsValue(b)) ControllerStatusChanged?.Invoke(b.Status);
             }, null);
             ControllerConnected?.Invoke(bridge.Status);
+            // Čtení spustit až po přihlášení k událostem, aby se žádné odpojení neztratilo.
+            ds.Start();
         }
+
+        _pollTimer.Interval = _failedPaths.Count > 0 ? RetryPollMs : IdlePollMs;
     }
 
     private void Remove(string path)

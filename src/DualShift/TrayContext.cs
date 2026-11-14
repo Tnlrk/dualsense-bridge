@@ -84,15 +84,16 @@ public sealed class TrayContext : ApplicationContext
         if (!_startMinimized) ShowSettings();
 
         RefreshInstalledCopy();
-        if (!await EnsureViGEmAsync()) return;
-        StartDevices();
+        if (!StartDevices())
+        {
+            if (!await OfferViGEmInstallAsync()) return;
+            if (!StartDevices()) return;
+        }
         await OfferHidHideOnceAsync();
     }
 
-    private async Task<bool> EnsureViGEmAsync()
+    private async Task<bool> OfferViGEmInstallAsync()
     {
-        if (DependencyInstaller.IsInstalled(Dependency.ViGEmBus)) return true;
-
         var answer = MessageBox.Show(
             Loc.T("dlg_vigemNeeded"),
             AppName, MessageBoxButtons.YesNo, MessageBoxIcon.Question);
@@ -133,9 +134,10 @@ public sealed class TrayContext : ApplicationContext
         }
     }
 
-    private void StartDevices()
+    /// <summary>Vrací false, pokud chybí ovladač ViGEmBus.</summary>
+    private bool StartDevices()
     {
-        if (_devices is not null) return;
+        if (_devices is not null) return true;
         try
         {
             _devices = new DeviceManager(_settings);
@@ -143,7 +145,7 @@ public sealed class TrayContext : ApplicationContext
         catch (VigemBusNotFoundException)
         {
             UpdateTray();
-            return;
+            return false;
         }
 
         _devices.ControllerConnected += OnConnected;
@@ -152,6 +154,7 @@ public sealed class TrayContext : ApplicationContext
         _devices.ControllerInaccessible += OnInaccessible;
         _devices.Scan();
         UpdateTray();
+        return true;
     }
 
     private async Task OfferHidHideOnceAsync()
@@ -432,11 +435,8 @@ public sealed class TrayContext : ApplicationContext
         if (_settings.HideOriginal && !_whitelistRepairTried && DependencyInstaller.IsInstalled(Dependency.HidHide))
         {
             _whitelistRepairTried = true;
-            if (await RunHidHideAsync(true, new List<string>()))
-            {
-                await Task.Delay(500);
-                _devices?.Scan();
-            }
+            // Po doplnění na whitelist ovladač znovu otevře opakovaný pokus v DeviceManageru.
+            await RunHidHideAsync(true, new List<string>());
             return;
         }
         Notify(Loc.T("note_inaccessibleTitle"), Loc.T("note_inaccessibleText"), ToolTipIcon.Warning);
